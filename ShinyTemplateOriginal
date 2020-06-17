@@ -1,0 +1,139 @@
+---
+title: "Tweets on Parkland Shooting"
+output: html_document
+runtime: shiny
+---
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r, echo = FALSE}
+#Subsets the media into its three forms (photos, animated gifs, videos)
+setwd("~/Desktop/Research")
+total_ds = read.csv("out0MergeUnique.csv")
+total_ds$observationNumber = seq.int(nrow(total_ds))
+total_ds = total_ds[,c("observationNumber", "guid","text","tweet_url", "type", "medium", "media_url", "user")]
+photos = total_ds[total_ds[ ,"medium"] == "photo", ]
+animated_gifs = total_ds[total_ds[ ,"medium"] == "animated_gif", ]
+videos = total_ds[total_ds[ ,"medium"] == "video", ]
+```
+
+ 
+
+```{r, echo = FALSE}
+#Function that access the media format and tweet information
+tweet_info = function(media_ds, image_number) {
+  myurl = media_ds[image_number, "media_url"]
+  myurl = toString(myurl)
+  #browseURL(myurl)
+  
+  guid_ = paste0("GUID: ", toString(media_ds[image_number, "guid"]))
+  tweet_url_ = paste0("Link: ", media_ds[image_number, "tweet_url"])
+  text_ = paste0("Text: ", media_ds[image_number, "text"])
+  categories_ = paste0("Categories: ", "")
+  
+  #result = paste0(guid_, tweet_url_, text_, categories_)
+  result <- paste(guid_, tweet_url_, text_, categories_, sep = '\n')
+  return(result)
+}
+#tweet_info(photos, 1)
+```
+
+```{r, echo = FALSE}
+#Creates the Shiny App for the Media Output project
+library("shiny")
+library("shinyWidgets")
+library("data.table")
+
+# Define UI ----
+ui = fluidPage(
+    titlePanel("Media Output"),        # Title
+    sidebarLayout(
+      sidebarPanel(
+        h3("Media Data Selection"),             # Note the , 
+        
+        # Dropdown Menu with fixed Choices
+        selectInput(inputId = "ds",                         # Server ID
+                    label = "Choose a Media Format:",            # Label
+                    choices = c("photos", "animated gifs", "videos")), # Choices
+        
+        # Numeric Field
+        numericInput(inputId = "obs",                       # Server ID
+                     label = "Number of Media Observations:",       # UI Label
+                     value = 10),                           # Default Value
+        
+        numericInput(inputId = "tweet_num",                       # Server ID
+                     label = "Tweet Number",                 # UI Label
+                     value = 1),                           # Default Value
+        	
+         searchInput(inputId = "search", label = "Enter your text",
+                     placeholder = "A placeholder",
+                      btnSearch = icon("search"),
+                      btnReset = icon("remove"),
+                      width = "450px"
+    ),
+    br(),
+    verbatimTextOutput(outputId = "res"),
+        
+    
+        actionButton(inputId = "preview",                   # Server ID
+                     label = "Load Preview Data")           # UI Label
+      ), # close: sidebarPanel()
+      mainPanel(
+        #h3("Head of the Dataset"),    # HTML
+        #tableOutput("view"),          # Table View
+        
+        #h3("Dataset Summary"),        # HTML
+        #verbatimTextOutput("summary") # Output Asis
+        
+        tabsetPanel(type = "tabs",
+                  tabPanel("Table", tableOutput("view")),
+                  tabPanel("Summary", verbatimTextOutput("summary")),
+                  tabPanel("Info", textOutput("text"))
+      )
+      
+      ) # close: mainPanel()
+    ) # close: sidebarLayout()
+  ) # close: fluidPage(
+# Define server logic ----
+server = function(input, output, session) {
+  
+  active_dataset = 
+    eventReactive(input$preview, { # Event Reactive
+    switch(input$ds, 
+           "photos" = photos,
+           "animated gifs" = animated_gifs,
+           "videos" = videos)
+  }) # close: eventReactive()
+  
+  output$view = renderTable({      # Table Render
+    active_dataset()[input$tweet_num:(input$tweet_num+input$obs),]
+  }) # close: renderPrint()  
+  
+  output$summary = renderPrint({   # Summary Render
+    summary(active_dataset())
+  }) # close: renderPrint()
+  
+  output$text = renderText({      # Text Render
+    tweet_info(active_dataset(), input$tweet_num)
+    
+  }) # close: renderPrint()
+  output$res <- renderPrint({
+      input$search
+  })
+  observeEvent(input$search_reset, {
+    updateTextInput(session = session, inputId = "text", value = "RESET!")
+  })
+}
+# Launch the App
+shinyApp(ui = ui, server = server)
